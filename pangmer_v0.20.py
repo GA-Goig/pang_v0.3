@@ -318,8 +318,6 @@ def AlignRecords(files, index, index_map, k, G, F, J, L, N, max_seeds,
                 # First produce alignments with indexed sequences and retrieve
                 # coordinates of these alignments
                 alignment_coordinates = SeedAndExtend(seq, index, k, G, F, max_seeds)
-                if title == "M02918:57:000000000-APPEG:1:2118:19555:24274":
-                    print "alignment_coordinates = {}".format(alignment_coordinates)
                 if alignment_coordinates:
                     # Sort alignment coordinates
                     sorted_coordinates = SortCoordinates(alignment_coordinates)
@@ -328,14 +326,9 @@ def AlignRecords(files, index, index_map, k, G, F, J, L, N, max_seeds,
                     # Get new sequences that do not produce core alignments
                     # This new sequences will be added to a new GROUP so first
                     # update the global variable with the new group
-                    if title == "M02918:57:000000000-APPEG:1:2118:19555:24274":
-                        print "joined_coords = {}".format(joined_coords)
                     new_seqs = GetNewCoreSeqs(joined_coords, seq, L, N)
                     for new_seq, new_seq_start, new_seq_end, orphan in new_seqs:
-                        if title == "M02918:57:000000000-APPEG:1:2118:19555:24274":
-                            print "new_seq = {}".format(new_seq)
-                            print "new_seq_start = {}".format(new_seq_start)
-                            print "new_seq_end = {}".format(new_seq_end)
+
                         if not orphan:
                             cluster = "Cluster_" + str(curr_cluster)
                             # Format header to CORE_TITLE format
