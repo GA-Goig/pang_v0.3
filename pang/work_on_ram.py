@@ -30,8 +30,6 @@ def AlignRecords(fasta, index, index_map, k, G, F, J, L, N, max_seeds,
                     sorted_coordinates = SortCoordinates(alignment_coordinates)
                     # And Join fragments that are as close as parameter J
                     joined_coords = JoinFragments(sorted_coordinates, J)
-                    if ref == "NZ_CP012019.1":
-                        print joined_coords
                     # Get new sequences that do not produce core alignments
                     # This new sequences will be added to a new GROUP so first
                     # update the global variable with the new group

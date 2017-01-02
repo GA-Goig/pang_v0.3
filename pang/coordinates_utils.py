@@ -8,10 +8,8 @@ def SortCoordinates(coordinates, reverse=False):
 
     e.g  INPUT  = [(500, 100), (1000, 450), (80, 50)]
          OUTPUT = [(1000, 450), (500, 100), (80, 50)]
-
-
-
     '''
+
     if reverse:
         return sorted(coordinates, key=lambda x:x[1], reverse=True)
     else:
@@ -60,11 +58,12 @@ def GetNewCoreSeqs(joined_coords, seq, L, N):
         previous_end = tuple_A[1]
         next_start = tuple_B[0]
         new_seq = seq[previous_end + 1 : next_start]
-        if len(new_seq) < L or NucleotideFreq(new_seq, "N") > N:
-            orphan = True
-        new_seq_start = previous_end
-        new_seq_end = next_start
-        yield (new_seq, new_seq_start, new_seq_end, orphan)  
+        if new_seq:
+	        if len(new_seq) < L or NucleotideFreq(new_seq, "N") > N:
+	            orphan = True
+	        new_seq_start = previous_end
+	        new_seq_end = next_start
+	        yield (new_seq, new_seq_start, new_seq_end, orphan)  
 
     # Take the remaining sequence after last pair of coordinate if it didn't produce
     # any alignment
@@ -169,93 +168,122 @@ def MapAlignments(joined_coords, index_map):
 
     return records_map
 
-def JoinCoordinates(sorted_coords, J, reverse=False):
-    '''This function takes a list of tuples of start, end coordinates sorted
-    by ascending value and try yo join them if end coordinate of one tuple is
-    less than J nucleotides of distance that start coordinate of the next tuple
-
-    eg.  IN  = [ (100, 200), (225, 333), (1000, 2000)]; J=50
-         OUT = [ (100, 333), (1000, 2000)]
-    '''
-    from copy import copy
-
-    scoords = copy(sorted_coords)
-    # Join fragments that are no more distant that J value
-    i = 0
-    while i < len(scoords) - 1:
-        # Take contiguous t uples of coordinates
-        tuple_A = scoords[i]
-        tuple_B = scoords[i+1]
-
-        # Take coordinates of each tuple
-        start_coord_A = tuple_A[0]
-        end_coord_A = tuple_A[1]
-        start_coord_B = tuple_B[0]
-        end_coord_B = tuple_B[1]
-        distance = start_coord_B - end_coord_A # Then calculate distance
-        # If sorted_coords describe a reverse_complement alignment, then 
-        # distance will be always negative, so get the absolute value
-        if reverse:
-            distance = -distance
-        if distance <= J: # If distance is lower than value J
-            new_start = start_coord_A
-            new_end = end_coord_B
-            # Update second tuple with new coordinates and delete first tuple            
-            scoords[i] = (new_start, new_end)  
-            del scoords[i+1]  
-        else:
-            i += 1
-
-    return scoords
-
-
 def JoinFragments(sorted_coords, J):
     '''This function takes a list of sorted tuples of tuples of
     (start,end) coordinates associated to coordinates where the
     scanned sequence has aligned in index and joins them if a
     distance less than J separate them
+    
+    In the following example for J=20
+
+    e.g 
+
+    INPUT = [
+             ((0,100), [(100,200), (600, 500), (1000000, 1000100)]),
+             ((120,500), [(220,600), (480, 100)])
+            ]
+    
+    OUTPUT = [ 
+             ((0,100) [(1000000,1000100)])
+             ((0,500),[(100,600), (600,100)])
+             ]
     '''
     from copy import copy
+
 
     scoords = copy(sorted_coords)
     # Join fragments that are no more distant that J value
     i = 0
+    # Singletons is a list that will hold coordinates for fragments that have
+    # not been joined so in a last step they are added to joined fragments
+    # and both, joined and unjoined fragments are returned by the function
+    singletons = []
     while i < len(scoords) - 1:
         # Take contiguous t uples of coordinates
         tuple_A = scoords[i][0]
         tuple_B = scoords[i+1][0]
         index_coords_A = scoords[i][1]
         index_coords_B = scoords[i+1][1]
+        joined = False
 
-        # Take coordinates of each tuple
-        start_coord_A = tuple_A[0]
-        end_coord_A = tuple_A[1]
-        start_coord_B = tuple_B[0]
-        end_coord_B = tuple_B[1]
-        distance = start_coord_B - end_coord_A # Then calculate distance         
-        if distance <= J: # If distance is lower than value J
-            new_start = start_coord_A
-            new_end = end_coord_B
-            new_index_coords = index_coords_A + index_coords_B
-            # Split new index coordinates in two variables depending if they
-            # describe alignments in forward or reverse strand
-            forward_icoords, reverse_icoords = SplitFwRv(new_index_coords)
-            # sort new forward and reverse icoords 
-            forward_sorted = SortCoordinates(forward_icoords)
-            reverse_sorted = SortCoordinates(reverse_icoords, reverse=True)
-            # And join those separated less than J nucleotides
-            forward_joined = JoinCoordinates(forward_sorted, J)
-            reverse_joined = JoinCoordinates(reverse_sorted, J, reverse=True)
-            # Now join forward and reverse coordinates again to return along
-            # with scanned sequence
-            joined_new_icoords = forward_joined + reverse_joined
-            # Update second tuple with new coordinates and delete first tuple            
-            scoords[i] = ( (new_start, new_end), joined_new_icoords)   
-            del scoords[i+1]  
-        else:
+        # Join vectors keep track of what coordinates have been joined, 0 means
+        # that coordinate has not been joined while 1 means joining with another
+        # pair of coordinates
+        join_vector_A = [0]*len(index_coords_A)
+        join_vector_B = [0]*len(index_coords_B)
+
+        new_index_coords = []
+        # Iterate over A index coordinates trying to join them with B index coords
+        for j in range(len(index_coords_A)):
+            index_A = index_coords_A[j]
+            # Check if are coords of a reverse alignment, strand will hold True
+            # if reverse and False if forward
+            strand_A = AreReverseCoords(index_A)
+            for k in range(len(index_coords_B)):
+                index_B = index_coords_B[k]
+                strand_B = AreReverseCoords(index_B)
+                # Only try joining if they are in same strand
+                if strand_A == strand_B:
+                    # Calc distance according to its orientation 
+                    if strand_A: # If they are reverse coordinates
+                        distance = index_A[1] - index_B[0]
+                    else: # If they are forward
+                        distance = index_B[0] - index_A[1]
+                    # If distance is less or equal than user defined J then join
+                    if distance <= J and distance >= 0:
+                        # Update join vectors
+                        join_vector_A[j] = 1
+                        join_vector_B[k] = 1
+                        joined = True
+                        # Get new joined coords
+                        new_index_start = index_A[0]
+                        new_index_end = index_B[1]
+                        # And update new index coords list
+                        new_index_coords.append( (new_index_start, new_index_end) )
+        
+        if not joined: # If no join has been produced, pass to next tuple
             i += 1
+        else: # If any join has been produced, update coords
+            new_start = tuple_A[0]
+            new_end = tuple_B[1]
+            scoords[i] = ( (new_start, new_end), new_index_coords)
+            del scoords[i+1]
+            # Update singletons list with fragments that have not been joined
+            no_join_A = []
+            for j in range(len(index_coords_A)):
+                if join_vector_A[j] == 0:
+                    no_join_A.append(index_coords_A[j])
+            if no_join_A:
+                singletons.append((tuple_A, no_join_A))
 
-    return scoords
+            no_join_B = []
+            for k in range(len(index_coords_B)):
+                if join_vector_B[k] == 0:
+                    no_join_B.append(index_coords_B[k])
+            if no_join_B:
+                singletons.append((tuple_B, no_join_B))
+
+    # merge with singletons
+    merged = scoords + singletons
+    # resort and return
+    return sorted(merged, key=lambda x:x[0])
+
+def AreReverseCoords(coords):
+    '''Return True if coords are pointing out a reverse alignment, otherwise
+    return False
+
+    e.g (100, 200) --> False
+        (580, 320) --> True
+
+    '''
+    if coords[0] > coords[1]:
+        return True
+    else:
+        return False
+
+    # This line should not be reached as a pair of alignment coordinates should
+    # never be equal
+    assert False
 
 def SplitFwRv(coordinates):
     '''This function takes a list of tuples of coords and split it in
@@ -276,76 +304,4 @@ def SplitFwRv(coordinates):
         else:
             Rv.append(coords)
 
-    return Fw, Rv
-            
-def CompactMap(mapping):
-    '''This function takes a mapping dict and reduces its number of
-    records if different cluster records actually come from same
-    region aligned eg:
-    
-    INPUT:
-
-    Cluster_2       1399    1536    NZ_BAYP01000052.1       5903    strand  1422    1992
-    Cluster_2       1537    1674    NZ_BAYP01000052.1       5903    strand  1422    1992
-    Cluster_2       1688    1969    NZ_BAYP01000052.1       5903    strand  1422    1992
-
-    OUTPUT
-
-    Cluster_2       1399    1969    NZ_BAYP01000052.1       5901    strand  1422    1992
-
-    ACTUAL INPUT:
-
-    mapping = { 
-                "Cluster_2" : (1399, 1536, NZ_BAYP01000052.1, 5903, strand, 1422, 1992),
-                ...
-                ...
-                }
-    '''
-
-    # Dict for final result initialized with same records and empty lists
-    compact_mapping = mapping.fromkeys(mapping, [])
-    # For each cluster
-    for cluster in mapping:
-        # Take all records
-        records = mapping[cluster]
-        # Begin from first record
-        curr_record = records[0]
-        # Store current cluster start, end, ref, sequence start, end for this record
-        curr_cstart, curr_cend, curr_ref, cstrand, curr_sstart, curr_send = \
-        curr_record
-        # Now iterate over each record to see if they can be collapsed starting
-        # from the second
-        for next_record in records[1:]:
-            next_cstart, next_cend, next_ref, nstrand, next_sstart, next_send = \
-            next_record
-            # If next record comes from same sequence accession (ref)
-            if curr_ref == next_ref:
-                # And from same sequence region
-                if curr_sstart == next_sstart and curr_send == next_send:
-                    # Both records in the same cluster are actually together, so
-                    # collapse its coordinates in a single record
-                    curr_cend = next_cend
-                else:
-                    # Although same ref, if they do not come from same region, they
-                    # are actually separated records. So add current record to compact
-                    record = (curr_cstart, curr_cend, curr_ref, cstrand, 
-                              curr_sstart, curr_send)
-                    compact_mapping[cluster].append(record)
-                    # And current record is now the one we were processing
-                    curr_cstart, curr_cend, curr_ref, cstrand, curr_sstart, curr_send = \
-                    next_record
-            else:
-                # If they do not come from same ref, they are separated records,
-                # so ad current record to compact
-                record = (curr_cstart, curr_cend, curr_ref, cstrand, curr_sstart, 
-                          curr_send)
-                compact_mapping[cluster].append(record)
-                # And current record is now the one we were processing
-                curr_cstart, curr_cend, curr_ref, cstrand, curr_sstart, curr_send = \
-                next_record
-        # Append last record
-        record = (curr_cstart, curr_cend, curr_ref, cstrand, curr_sstart, curr_send)
-        compact_mapping[cluster].append(record)
-
-    return compact_mapping
-        
+    return Fw, Rv        
