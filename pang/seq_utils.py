@@ -13,11 +13,10 @@ def KmerGenerator(sequence, k_start, k):
         else:
             yield 0
 
-def GappedKmerGenerator(sequence, k_start, k, G):
+def GappedKmerGenerator(sequence, k_start, jump, k):
     '''GENERATOR: Given a sequence, a kmer length and a gap value G, yield 
     k-mers from sequence moving k + G bases at a time from k_start coordinate'''
     
-    jump = k+G
     k_start += jump
     k_end = k_start + k
     while True:

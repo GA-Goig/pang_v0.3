@@ -132,6 +132,9 @@ def MapCoordinates(index_map, coords, reverse=False):
                 records.append((record, end, start))
     # This line should not be reached. Only would be if end_coord is > than map_end
     # and that should not be possible
+    print "start, end_coord = {},  {}".format(start_coord, end_coord)
+    print "map_start, end   = {},  {}".format(map_start, map_end)
+    print "record = {}".format(record)
     assert False
 
 def MapAlignments(joined_coords, index_map):
